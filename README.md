@@ -37,6 +37,14 @@ clean (verified as part of building this).
 local server and verifies room create/join rejection rules, five simultaneous clients,
 presence, cursor relay, reaction relay, and leave cleanup.
 
+## Deployment configuration
+
+The client derives its WebSocket URL from the page protocol and `VITE_WS_HOST`. For local
+development it connects to `ws://localhost:8080`. For a deployed HTTPS client, set
+`VITE_WS_HOST` to the WebSocket server hostname only (for example,
+`my-server.onrender.com`); the client then uses `wss://` automatically. The WebSocket
+server must run on a host that supports persistent WebSocket connections.
+
 ## Known limitations
 
 - No authentication or per-room access control (shared public room IDs, per the assignment).
@@ -81,16 +89,16 @@ crashing the connection.
 |---|---|---|
 | `cursor` | `{ type, x, y, seq, t }` | `x`/`y` are normalized 0–1 coordinates; throttled client-side. |
 | `reaction` | `{ type, emoji, x, y, seq, t }` | Normalized coordinates; one per tap, never throttled. |
-| `ping` | `{ type, t }` | Heartbeat-adjacent; used for potential RTT measurement, not required for liveness (see Failure handling). |
+| `ping` | `{ type, t }` | Sent on connect and every 10 seconds to measure round-trip latency. It is not used for liveness. |
 
 ### Server → Client
 
 | Type | Shape | Notes |
 |---|---|---|
-| `welcome` | `{ type, clientId, participants, serverTime }` | Sent once, right after join/reconnect. Full room snapshot. |
+| `welcome` | `{ type, clientId, participants, serverTime }` | Sent once, right after join/reconnect. Full snapshot with normalized cursor positions. |
 | `presence` | `{ type, participants }` | Sent to everyone else when someone joins. |
-| `cursor` | `{ type, clientId, x, y, seq, t }` | Relayed, excluding the sender. |
-| `reaction` | `{ type, clientId, emoji, x, y, seq, t }` | Relayed, excluding the sender. |
+| `cursor` | `{ type, clientId, x, y, seq, t }` | Normalized coordinates, relayed excluding the sender. |
+| `reaction` | `{ type, clientId, emoji, x, y, seq, t }` | Normalized coordinates, relayed excluding the sender. |
 | `leave` | `{ type, clientId }` | On clean close or heartbeat timeout. |
 | `pong` | `{ type, t }` | Echoes the client's `ping.t`. |
 | `error` | `{ type, message }` | Malformed/unknown client message. |
@@ -98,7 +106,9 @@ crashing the connection.
 Room, client identity, and intent are carried in the WebSocket URL's query string
 (`?roomId=...&clientId=...&name=...&mode=create|join`) rather than in a `join` message,
 since the server needs them to route the upgrade *before* any message frame can arrive.
-`create` rejects an already-active name; `join` rejects a room that does not exist.
+`create` rejects an already-active name; `join` rejects a room that does not exist. A
+repeat `create` from the same tab identity is accepted as a reconnect, which handles a
+development-mode remount or an accidental double click without admitting a second user.
 
 ### Throttling / batching high-frequency updates
 
@@ -164,7 +174,9 @@ case buffering/replay ever produces an out-of-order `push`.
 **Malformed messages:** any client message that isn't valid JSON, or doesn't match one
 of the known `ClientMessage` shapes (checked field-by-field via `isClientMessage`), gets
 a `{ type: 'error' }` reply and is otherwise ignored — never silently accepted, never a
-thrown exception that could crash the connection or the process.
+thrown exception that could crash the connection or the process. Client-side
+`isServerMessage` also validates every received server message, including each participant
+inside a `welcome` or `presence` snapshot, before it reaches UI state.
 
 **Disconnect (clean or dropped):** the server pings every connected client every 15s. A
 client that doesn't pong before the *next* sweep is dropped and a `leave` is broadcast —
@@ -173,16 +185,16 @@ network drop that never sends a TCP close. A clean tab-close/`socket.close()` is
 immediately via the `close` frame instead of waiting for the next sweep.
 
 **Connection feedback:** the sidebar shows live round-trip latency calculated from the
-existing `ping`/`pong` timestamp. Server-side connection errors remain visible with a
-Retry button instead of silently sending the user back to the room-selection screen.
+application `ping`/`pong` timestamp, starting immediately after the socket opens and
+refreshing every 10 seconds. Server-side connection errors remain visible with a Retry
+button instead of silently sending the user back to the room-selection screen.
 
-**Reconnect:** the client persists its `clientId` in `sessionStorage`, so refreshing the
-page (or recovering after a dropped connection) rejoins as the *same* identity. Server-
-side, `Room.join()` recognizes an existing `clientId` and swaps in the new socket rather
-than creating a second entry — no duplicate cursor, no special-cased "welcome back" flow.
-`Room.leaveIfCurrentSocket()` guards against a subtle race here: if the *old* socket's
-`close` event fires after the client has already reconnected on a new one, it must not
-delete the freshly-reconnected client.
+**Reconnect:** the client keeps a tab identity in `sessionStorage` and reuses it on a
+page refresh or automatic WebSocket reconnect. A newly opened or browser-duplicated tab
+gets a new identity, preventing it from replacing another live tab. Server-side,
+`Room.join()` recognizes an existing `clientId` and swaps in the new socket rather than
+creating a second entry. `Room.leaveIfCurrentSocket()` guards against a subtle race: if
+the old socket closes after a reconnect, it must not delete the fresh connection.
 
 **Broadcast fan-out:** `Room.broadcast()` iterates the room's client map once per
 message (O(n) in room size, not O(n²)) and always excludes the sender — no client ever

@@ -19,21 +19,35 @@ server/src/
 client/src/
   connection.ts            TRANSPORT + PROTOCOL — wraps native WebSocket, exposes
                             createRoom()/sendAction()/onRemoteAction(), throttles
-                            outbound cursor updates, handles reconnect backoff.
+                            normalized cursor updates, measures RTT with ping/pong,
+                            and handles reconnect backoff.
   interpolation.ts          RECONCILIATION — buffers remote samples, produces smooth
                             interpolated/extrapolated positions. No DOM, no canvas,
                             no WebSocket knowledge.
-  render.ts                 RENDERING — pure canvas-drawing functions. Takes plain
-                            {x,y,color,name} view objects; doesn't know where they
-                            came from.
+  render.ts                 RENDERING — pure canvas-drawing functions. Takes normalized
+                            {x,y,color,name} view objects and scales them to the current
+                            canvas; doesn't know where they came from.
   App.tsx                   Glue: wires connection → interpolators → render loop,
-                            plus the presence sidebar and reaction click handler.
+                            plus the create/join lobby, presence sidebar, latency/error
+                            feedback, and reaction click handler.
 ```
 
 Each layer only talks to the one below it through a narrow interface (plain objects,
 callbacks) — `room.ts` never imports `wsocket.ts`'s frame-encoding internals, just the
 `RawSocket` interface (`send`/`ping`/`close`/`onText`/`onClose`/`onPong`);
 `interpolation.ts` and `render.ts` have zero networking imports at all.
+
+## Room lifecycle and identity
+
+The server owns a `Map<roomId, Room>`. Clients connect with explicit `mode=create` or
+`mode=join` query parameters. A join to an unknown room is rejected, while a create for
+an active room is rejected unless it is the same stable client identity reconnecting.
+When the final participant leaves, the room is deleted from the map.
+
+The client preserves its identity across a refresh and automatic reconnect. It generates
+a new identity for a newly opened or duplicated browser tab, so two tabs do not replace
+each other's WebSocket connection. Cursor and reaction coordinates are normalized to
+`0..1`, validated by the server, and scaled to each local canvas at render time.
 
 ## Extensibility: adding a new action type
 
@@ -61,8 +75,9 @@ application-layer change, never a transport-layer one.
 - **No self-echo**: every `broadcast()` call from `server.ts` passes the sender's
   `clientId` as the exclude parameter.
 - **Heartbeat** uses the raw `ping`/`pong` opcodes (0x9/0xA) that `wsocket.ts` exposes,
-  not an application-level "are you there" message — this is the same mechanism
-  `ws`/browsers use under the hood, just implemented directly.
+  not an application-level "are you there" message. Separately, the client sends an
+  application `ping` on connect and every 10 seconds; the echoed `pong` supplies the
+  latency value shown in the UI.
 
 ## Horizontal scaling (discussion only — not implemented)
 
