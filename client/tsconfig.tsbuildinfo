@@ -1,0 +1,1 @@
+{"root":["./src/connection.ts","./src/interpolation.ts","./src/protocol.ts","./src/render.ts","./src/app.tsx","./src/main.tsx","../shared/protocol.ts"],"version":"5.9.3"}
