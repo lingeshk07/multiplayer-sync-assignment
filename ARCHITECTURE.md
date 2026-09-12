@@ -19,14 +19,14 @@ server/src/
 client/src/
   connection.ts            TRANSPORT + PROTOCOL — wraps native WebSocket, exposes
                             createRoom()/sendAction()/onRemoteAction(), throttles
-                            normalized cursor updates, measures RTT with ping/pong,
-                            and handles reconnect backoff.
+                            normalized cursor updates adaptively from smoothed RTT,
+                            measures RTT with ping/pong, and handles reconnect backoff.
   interpolation.ts          RECONCILIATION — buffers remote samples, produces smooth
                             interpolated/extrapolated positions. No DOM, no canvas,
                             no WebSocket knowledge.
   render.ts                 RENDERING — pure canvas-drawing functions. Takes normalized
-                            {x,y,color,name} view objects and scales them to the current
-                            canvas; doesn't know where they came from.
+                            {x,y,color,name} view objects, scales them to the current
+                            canvas, and reconciles overlapping reaction bursts.
   App.tsx                   Glue: wires connection → interpolators → render loop,
                             plus the create/join lobby, presence sidebar, latency/error
                             feedback, and reaction click handler.
@@ -48,6 +48,19 @@ The client preserves its identity across a refresh and automatic reconnect. It g
 a new identity for a newly opened or duplicated browser tab, so two tabs do not replace
 each other's WebSocket connection. Cursor and reaction coordinates are normalized to
 `0..1`, validated by the server, and scaled to each local canvas at render time.
+
+## Congestion and simultaneous-action handling
+
+The client derives a smoothed RTT from application `ping`/`pong` messages. It sends
+cursor updates every 33ms under 100ms RTT, then expands the interval proportionally up
+to 120ms as RTT rises. This is deliberately a client-side bandwidth decision; the server
+continues to relay each valid update without trying to predict network conditions.
+
+Reactions are not throttled or discarded. A per-client reaction sequence stream means
+two clients can tap at the same time without one action replacing the other. The renderer
+coalesces reactions that are close in position and within a 250ms window into a single
+burst with a `×N` label. This makes the simultaneous result legible while preserving the
+number of accepted reaction events.
 
 ## Extensibility: adding a new action type
 

@@ -4,7 +4,7 @@ import { createRoom } from './connection';
 import type { ConnectionState } from './connection';
 import type { Participant } from './protocol';
 import { CursorInterpolator, RENDER_DELAY_MS } from './interpolation';
-import { drawFrame, pruneReactions } from './render';
+import { drawFrame, pruneReactions, reconcileReaction } from './render';
 import type { ReactionBurst, RemoteCursorView } from './render';
 
 const EMOJIS = ['🎉', '🔥', '👏', '😂', '❤️'];
@@ -99,7 +99,7 @@ export default function App() {
         }
         interp.push({ x: action.x, y: action.y, t: performance.now() });
       } else {
-        reactionsRef.current.push({
+        reactionsRef.current = reconcileReaction(reactionsRef.current, {
           x: action.x,
           y: action.y,
           emoji: action.emoji,
@@ -170,7 +170,7 @@ export default function App() {
     const emoji = EMOJIS[Math.floor(Math.random() * EMOJIS.length)];
     roomRef.current?.sendAction({ type: 'reaction', emoji, x, y });
     // Show our own reaction immediately rather than waiting on the round trip.
-    reactionsRef.current.push({ x, y, emoji, startedAt: performance.now() });
+    reactionsRef.current = reconcileReaction(reactionsRef.current, { x, y, emoji, startedAt: performance.now() });
   }
 
   function enterRoom(mode: 'create' | 'join') {

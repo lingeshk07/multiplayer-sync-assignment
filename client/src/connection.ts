@@ -27,12 +27,13 @@ type StateHandler = (state: ConnectionState) => void;
 type ErrorHandler = (message: string) => void;
 type LatencyHandler = (latencyMs: number) => void;
 
-// Cursor throttling: cap outbound rate and skip micro-movements. mousemove
-// fires at 60-120Hz; sending every event is wasted bandwidth for visual
-// output that updates at most 60fps on the receiving end anyway. 30Hz with
-// a small dead-zone is imperceptible for cursor tracking and cuts message
-// volume by 2-4x versus sending raw events.
+// Cursor throttling: cap outbound rate and skip micro-movements. At low RTT,
+// updates are capped at about 30Hz. As the measured RTT grows, the interval
+// expands to reduce pressure on an already congested connection.
 const CURSOR_MIN_INTERVAL_MS = 33;
+const CURSOR_MAX_INTERVAL_MS = 120;
+const RTT_TARGET_MS = 100;
+const RTT_SMOOTHING = 0.2;
 // Coordinates are normalized to 0–1 before sending. 0.002 is roughly 1–2px
 // on a typical canvas and avoids sending imperceptibly small movements.
 const CURSOR_MIN_DISTANCE = 0.002;
@@ -50,6 +51,7 @@ export function createRoom(opts: RoomOptions) {
   let closedByUser = false;
   let pingTimer: ReturnType<typeof setInterval> | null = null;
   let connectMode = opts.mode ?? 'join';
+  let smoothedRttMs: number | null = null;
 
   const remoteActionHandlers: RemoteActionHandler[] = [];
   const presenceHandlers: PresenceHandler[] = [];
@@ -140,7 +142,14 @@ export function createRoom(opts: RoomOptions) {
         leaveHandlers.forEach((h) => h(msg.clientId));
         break;
       case 'pong':
-        latencyHandlers.forEach((h) => h(Math.max(0, Date.now() - msg.t)));
+        {
+          const rttMs = Math.max(0, Date.now() - msg.t);
+          smoothedRttMs = smoothedRttMs === null
+            ? rttMs
+            : smoothedRttMs + (rttMs - smoothedRttMs) * RTT_SMOOTHING;
+          const displayedRttMs = smoothedRttMs ?? rttMs;
+          latencyHandlers.forEach((h) => h(Math.round(displayedRttMs)));
+        }
         break;
       case 'error':
         console.warn('[room] server error:', msg.message);
@@ -162,11 +171,21 @@ export function createRoom(opts: RoomOptions) {
     return seq;
   }
 
+  function cursorIntervalMs() {
+    if (smoothedRttMs === null || smoothedRttMs <= RTT_TARGET_MS) {
+      return CURSOR_MIN_INTERVAL_MS;
+    }
+    return Math.min(
+      CURSOR_MAX_INTERVAL_MS,
+      CURSOR_MIN_INTERVAL_MS + (smoothedRttMs - RTT_TARGET_MS) * 0.25
+    );
+  }
+
   function sendAction(action: Action) {
     const now = performance.now();
     if (action.type === 'cursor') {
       const dist = Math.hypot(action.x - lastSent.x, action.y - lastSent.y);
-      if (now - lastSent.t < CURSOR_MIN_INTERVAL_MS || dist < CURSOR_MIN_DISTANCE) return;
+      if (now - lastSent.t < cursorIntervalMs() || dist < CURSOR_MIN_DISTANCE) return;
       lastSent = { x: action.x, y: action.y, t: now };
       send({ type: 'cursor', x: action.x, y: action.y, seq: nextSequence(), t: Date.now() });
     } else {

@@ -68,7 +68,8 @@ edge cases (0/1/many samples, extrapolation cap, out-of-order rejection) right.
 
 Claude (Anthropic) assisted with the initial implementation. Codex was later used to
 review the assignment against the final code, improve the UI and room workflow, tighten
-runtime validation, add the five-client integration test, and run type-check/build
+runtime validation, add the five-client integration test, add adaptive throttling and
+reaction reconciliation, and run type-check/build
 verification. The final implementation was reviewed and tested locally; I can explain
 and defend each file and design decision.
 
@@ -114,12 +115,20 @@ development-mode remount or an accidental double click without admitting a secon
 
 Raw `mousemove` fires at 60-120Hz depending on hardware — sending every event is wasted
 bandwidth for output that's displayed at most 60fps on the receiving end. `connection.ts`
-caps outbound cursor sends to ~30Hz (`CURSOR_MIN_INTERVAL_MS = 33`) *and* skips
-movements smaller than 0.002 of the canvas dimension (roughly 1–2 pixels on a typical
-canvas), so a stationary mouse sends nothing. This alone cuts message volume
-2-4x versus naive forwarding, with no perceptible loss of smoothness once you add
-interpolation on the receiving end (see below). Reactions are discrete user intent (a
-tap) and are never throttled — each one is a distinct, meaningful event.
+caps outbound cursor sends at ~30Hz when RTT is at or below 100ms
+(`CURSOR_MIN_INTERVAL_MS = 33`) and skips movements smaller than 0.002 of the canvas
+dimension (roughly 1–2 pixels on a typical canvas). The client smooths RTT readings from
+`pong` messages; above 100ms it increases the cursor-send interval gradually, up to 120ms,
+to avoid worsening a congested connection. Reactions are discrete user intent and are
+never throttled — each one is still sent to the server as a separate meaningful event.
+
+### Simultaneous reactions
+
+Reactions do not overwrite each other: the server relays every accepted reaction using
+its own per-client reaction sequence stream. For readability, each client reconciles
+reactions that arrive within 250ms and within 0.035 normalized canvas units of one
+another into one animated burst labeled `×N`. This is presentation-only; the count makes
+simultaneous taps on the same target visible without hiding their multiplicity.
 
 ### What lives on the server vs. is purely relayed
 
