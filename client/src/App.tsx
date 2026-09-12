@@ -138,7 +138,7 @@ export default function App() {
       cancelAnimationFrame(raf);
       window.removeEventListener('resize', resize);
     };
-  }, []);
+  }, [roomId]);
 
   function handleMouseMove(e: React.MouseEvent<HTMLCanvasElement>) {
     const rect = e.currentTarget.getBoundingClientRect();
