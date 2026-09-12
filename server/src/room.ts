@@ -142,6 +142,10 @@ export class Room {
     for (const c of [...this.clients.values()]) {
       if (!c.alive) {
         this.clients.delete(c.id);
+        // A heartbeat timeout means the peer did not respond to a prior
+        // control-frame ping. Release the underlying TCP resource as well as
+        // removing its room state; do not wait for a close that may never come.
+        c.socket.terminate();
         onDrop(c.id);
         continue;
       }

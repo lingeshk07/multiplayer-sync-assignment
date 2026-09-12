@@ -7,7 +7,8 @@ shared/protocol.ts        message types + runtime validators (imported by both s
 
 server/src/
   wsocket.ts               TRANSPORT — raw WebSocket handshake + frame encode/decode.
-                            Knows nothing about rooms, cursors, or JSON contents.
+                            Enables TCP no-delay for latency-sensitive small frames;
+                            knows nothing about rooms, cursors, or JSON contents.
   protocol.ts               re-exports shared/protocol.ts
   room.ts                  STATE — room membership, last-known cursor, sequence
                             numbers, broadcast fan-out, heartbeat sweep.
@@ -91,6 +92,10 @@ application-layer change, never a transport-layer one.
   not an application-level "are you there" message. Separately, the client sends an
   application `ping` on connect and every 10 seconds; the echoed `pong` supplies the
   latency value shown in the UI.
+- **Small-frame transport:** after a successful upgrade, the server calls
+  `socket.setNoDelay(true)`. This prevents Node's TCP stack from applying Nagle batching
+  to server-originated cursor, reaction, heartbeat, and latency-pong frames. Browser and
+  reverse-proxy behavior remains outside the application's control.
 
 ## Horizontal scaling (discussion only — not implemented)
 

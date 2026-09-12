@@ -81,6 +81,16 @@ export class RawSocket {
     this.socket.end();
   }
 
+  /**
+   * Immediately tears down an unresponsive transport. This intentionally
+   * skips the WebSocket close handshake: a heartbeat timeout means that peer
+   * cannot be relied upon to receive or acknowledge it.
+   */
+  terminate() {
+    if (this.closed) return;
+    this.socket.destroy();
+  }
+
   private emitClose(code: number, reason: string) {
     if (this.closed) return;
     this.closed = true;

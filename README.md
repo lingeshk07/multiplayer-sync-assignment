@@ -55,8 +55,10 @@ server must run on a host that supports persistent WebSocket connections.
   ever split across frames automatically, so this hasn't been an issue in testing, but
   a client sending a deliberately fragmented frame would be mishandled.
 - No binary frame support (not needed — everything is JSON text).
-- Disconnect detection is bounded by the heartbeat interval (15s), so a dropped
-  connection can take up to ~15-30s to be reaped if it never sends a TCP `close`.
+- A dropped connection is detected on the heartbeat sweep after it misses a
+  control-frame pong. Depending on when the drop occurs, that takes about 15–30s;
+  then the server removes the client and forcibly destroys its unresponsive TCP
+  socket. A reverse proxy or browser still controls the client-side TCP behavior.
 
 ## Time spent
 
@@ -68,8 +70,9 @@ edge cases (0/1/many samples, extrapolation cap, out-of-order rejection) right.
 
 Claude (Anthropic) assisted with the initial implementation. Codex was later used to
 review the assignment against the final code, improve the UI and room workflow, tighten
-runtime validation, add the five-client integration test, add adaptive throttling and
-reaction reconciliation, and run type-check/build
+runtime validation, add the five-client integration test, add adaptive throttling,
+reaction reconciliation, explicit TCP no-delay handling for small WebSocket frames, and
+run type-check/build
 verification. The final implementation was reviewed and tested locally; I can explain
 and defend each file and design decision.
 
@@ -188,10 +191,16 @@ thrown exception that could crash the connection or the process. Client-side
 inside a `welcome` or `presence` snapshot, before it reaches UI state.
 
 **Disconnect (clean or dropped):** the server pings every connected client every 15s. A
-client that doesn't pong before the *next* sweep is dropped and a `leave` is broadcast —
-this bounds "zombie cursor" time to roughly one heartbeat interval even for a hard
-network drop that never sends a TCP close. A clean tab-close/`socket.close()` is handled
-immediately via the `close` frame instead of waiting for the next sweep.
+client that does not pong before the *next* sweep is dropped, its TCP socket is forcibly
+destroyed, and a `leave` is broadcast. A hard network drop therefore remains visible for
+about 15–30 seconds, depending on when it occurs relative to the sweep. A clean
+tab-close/`socket.close()` is handled immediately via the `close` frame instead of
+waiting for the next sweep.
+
+**Small-frame latency:** the upgraded server TCP socket explicitly uses `setNoDelay(true)`.
+This prevents Nagle batching from holding server-originated cursor, reaction, or ping/pong
+frames. It improves the Node-server leg only; it cannot remove latency caused by the
+browser, a reverse proxy, geographic distance, or server load.
 
 **Connection feedback:** the sidebar shows live round-trip latency calculated from the
 application `ping`/`pong` timestamp, starting immediately after the socket opens and
