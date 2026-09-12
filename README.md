@@ -24,6 +24,9 @@ participants enter that exact name and choose **Join room**. Rooms are isolated:
 participants in the same active room see one another. A room is removed after its final
 participant leaves, so it must be created again before it can be joined.
 
+Each newly opened tab receives its own client identity, including browser-duplicated tabs.
+Refreshing a tab preserves that tab's identity so it can reconnect without a duplicate cursor.
+
 Move your mouse over the canvas to broadcast your cursor; click to fire a reaction.
 The sidebar shows live presence and connection status.
 

@@ -11,7 +11,11 @@ const EMOJIS = ['🎉', '🔥', '👏', '😂', '❤️'];
 
 function getOrCreateClientId(): string {
   const key = 'mp-sync-client-id';
-  let id = sessionStorage.getItem(key);
+  // Browser "Duplicate tab" can clone sessionStorage. Only reuse an ID on a
+  // true refresh; a newly opened/duplicated tab must become its own participant.
+  const navigation = performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming | undefined;
+  const isReload = navigation?.type === 'reload';
+  let id = isReload ? sessionStorage.getItem(key) : null;
   if (!id) {
     id = crypto.randomUUID();
     sessionStorage.setItem(key, id);
