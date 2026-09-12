@@ -35,6 +35,7 @@ export default function App() {
   const [selfId] = useState(getOrCreateClientId);
   const [roomId, setRoomId] = useState<string | null>(getRoomIdFromUrl);
   const [roomInput, setRoomInput] = useState(() => getRoomIdFromUrl() ?? '');
+  const [roomMode, setRoomMode] = useState<'create' | 'join'>('join');
   const [roomError, setRoomError] = useState('');
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [connectionState, setConnectionState] = useState<ConnectionState>('connecting');
@@ -48,10 +49,14 @@ export default function App() {
     participantsMeta.current.clear();
     setParticipants([]);
 
-    const room = createRoom({ roomId, clientId: selfId, name: `guest-${selfId.slice(0, 4)}` });
+    const room = createRoom({ roomId, clientId: selfId, mode: roomMode, name: `guest-${selfId.slice(0, 4)}` });
     roomRef.current = room;
 
     room.onStateChange(setConnectionState);
+    room.onError((message) => {
+      setRoomError(message);
+      setRoomId(null);
+    });
 
     room.onWelcome((_id, initialParticipants) => {
       setParticipants(initialParticipants);
@@ -95,7 +100,7 @@ export default function App() {
     });
 
     return () => room.close();
-  }, [roomId, selfId]);
+  }, [roomId, roomMode, selfId]);
 
   // --- Render loop -------------------------------------------------------
   useEffect(() => {
@@ -155,13 +160,14 @@ export default function App() {
     reactionsRef.current.push({ x, y, emoji, startedAt: performance.now() });
   }
 
-  function enterRoom() {
+  function enterRoom(mode: 'create' | 'join') {
     const nextRoomId = roomInput.trim();
     if (!nextRoomId) {
       setRoomError('Enter a room name to continue.');
       return;
     }
     setRoomError('');
+    setRoomMode(mode);
     window.history.replaceState(null, '', `${window.location.pathname}?room=${encodeURIComponent(nextRoomId)}`);
     setRoomId(nextRoomId);
   }
@@ -185,14 +191,14 @@ export default function App() {
             id="room-name"
             value={roomInput}
             onChange={(event) => { setRoomInput(event.target.value); setRoomError(''); }}
-            onKeyDown={(event) => { if (event.key === 'Enter') enterRoom(); }}
+            onKeyDown={(event) => { if (event.key === 'Enter') enterRoom('join'); }}
             placeholder="e.g. design-team"
             autoFocus
           />
           {roomError && <p className="room-error" role="alert">{roomError}</p>}
           <div className="room-actions">
-            <button className="primary-button" type="button" onClick={enterRoom}>Create room</button>
-            <button className="secondary-button" type="button" onClick={enterRoom}>Join room</button>
+            <button className="primary-button" type="button" onClick={() => enterRoom('create')}>Create room</button>
+            <button className="secondary-button" type="button" onClick={() => enterRoom('join')}>Join room</button>
           </div>
           <p className="lobby-note">Rooms are separate: only people using the same room name can see one another.</p>
         </section>

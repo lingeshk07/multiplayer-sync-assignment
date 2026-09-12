@@ -9,7 +9,7 @@ const HEARTBEAT_INTERVAL_MS = 15000; // disconnects are detected within ~1 inter
 
 const rooms = new Map<string, Room>();
 
-function getRoom(roomId: string): Room {
+function createRoom(roomId: string): Room {
   let room = rooms.get(roomId);
   if (!room) {
     room = new Room();
@@ -26,13 +26,26 @@ const server = http.createServer((_req, res) => {
 server.on('upgrade', (req, socket) => {
   const url = new URL(req.url ?? '/', 'http://localhost');
   const roomId = url.searchParams.get('roomId') || 'default';
+  const mode = url.searchParams.get('mode') === 'create' ? 'create' : 'join';
   const clientId = url.searchParams.get('clientId') || randomUUID();
   const name = url.searchParams.get('name') || `guest-${clientId.slice(0, 4)}`;
 
   const raw = performHandshake(req, socket);
   if (!raw) return;
 
-  const room = getRoom(roomId);
+  const existingRoom = rooms.get(roomId);
+  if (mode === 'join' && !existingRoom) {
+    raw.send(JSON.stringify({ type: 'error', message: 'This room does not exist. Create it first or check the room name.' }));
+    raw.close(1008, 'room not found');
+    return;
+  }
+  if (mode === 'create' && existingRoom) {
+    raw.send(JSON.stringify({ type: 'error', message: 'This room already exists. Use Join room instead.' }));
+    raw.close(1008, 'room already exists');
+    return;
+  }
+
+  const room = existingRoom ?? createRoom(roomId);
   room.join(clientId, name, raw);
 
   // New joiner (or reconnecting client) gets a full snapshot of current
@@ -101,6 +114,7 @@ server.on('upgrade', (req, socket) => {
   raw.onClose(() => {
     if (room.leaveIfCurrentSocket(clientId, raw)) {
       room.broadcast({ type: 'leave', clientId });
+      if (room.size === 0) rooms.delete(roomId);
     }
   });
 });

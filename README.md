@@ -19,8 +19,10 @@ npm install
 npm run dev           # http://localhost:5173
 ```
 
-Open `http://localhost:5173` in 3-5 tabs (same room by default). To test separate rooms,
-append `?room=some-name` to the URL — only tabs sharing a room see each other.
+Open `http://localhost:5173`, enter a room name, and choose **Create room**. Other
+participants enter that exact name and choose **Join room**. Rooms are isolated: only
+participants in the same active room see one another. A room is removed after its final
+participant leaves, so it must be created again before it can be joined.
 
 Move your mouse over the canvas to broadcast your cursor; click to fire a reaction.
 The sidebar shows live presence and connection status.
@@ -92,9 +94,10 @@ crashing the connection.
 | `pong` | `{ type, t }` | Echoes the client's `ping.t`. |
 | `error` | `{ type, message }` | Malformed/unknown client message. |
 
-Room and client identity are carried in the WebSocket URL's query string
-(`?roomId=...&clientId=...&name=...`) rather than in a `join` message, since the server
-needs them to route the upgrade *before* any message frame can arrive.
+Room, client identity, and intent are carried in the WebSocket URL's query string
+(`?roomId=...&clientId=...&name=...&mode=create|join`) rather than in a `join` message,
+since the server needs them to route the upgrade *before* any message frame can arrive.
+`create` rejects an already-active name; `join` rejects a room that does not exist.
 
 ### Throttling / batching high-frequency updates
 
@@ -163,7 +166,7 @@ this bounds "zombie cursor" time to roughly one heartbeat interval even for a ha
 network drop that never sends a TCP close. A clean tab-close/`socket.close()` is handled
 immediately via the `close` frame instead of waiting for the next sweep.
 
-**Reconnect:** the client persists its `clientId` in `localStorage`, so refreshing the
+**Reconnect:** the client persists its `clientId` in `sessionStorage`, so refreshing the
 page (or recovering after a dropped connection) rejoins as the *same* identity. Server-
 side, `Room.join()` recognizes an existing `clientId` and swaps in the new socket rather
 than creating a second entry — no duplicate cursor, no special-cased "welcome back" flow.

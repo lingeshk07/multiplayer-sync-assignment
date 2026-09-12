@@ -4,6 +4,7 @@ import { isServerMessage } from './protocol';
 export interface RoomOptions {
   roomId: string;
   clientId: string;
+  mode?: 'create' | 'join';
   name?: string;
   /** Override the WebSocket server URL; otherwise inferred from location + VITE_WS_HOST. */
   url?: string;
@@ -23,6 +24,7 @@ type WelcomeHandler = (clientId: string, participants: Participant[], serverTime
 type LeaveHandler = (clientId: string) => void;
 export type ConnectionState = 'connecting' | 'open' | 'closed' | 'reconnecting';
 type StateHandler = (state: ConnectionState) => void;
+type ErrorHandler = (message: string) => void;
 
 // Cursor throttling: cap outbound rate and skip micro-movements. mousemove
 // fires at 60-120Hz; sending every event is wasted bandwidth for visual
@@ -50,6 +52,7 @@ export function createRoom(opts: RoomOptions) {
   const welcomeHandlers: WelcomeHandler[] = [];
   const leaveHandlers: LeaveHandler[] = [];
   const stateHandlers: StateHandler[] = [];
+  const errorHandlers: ErrorHandler[] = [];
 
   function setState(s: ConnectionState) {
     state = s;
@@ -61,7 +64,8 @@ export function createRoom(opts: RoomOptions) {
     const wsUrl =
       `${url}?roomId=${encodeURIComponent(opts.roomId)}` +
       `&clientId=${encodeURIComponent(opts.clientId)}` +
-      `&name=${encodeURIComponent(opts.name ?? '')}`;
+      `&name=${encodeURIComponent(opts.name ?? '')}` +
+      `&mode=${opts.mode ?? 'join'}`;
 
     socket = new WebSocket(wsUrl);
 
@@ -130,6 +134,7 @@ export function createRoom(opts: RoomOptions) {
         break; // could compute RTT here; not needed for the base demo
       case 'error':
         console.warn('[room] server error:', msg.message);
+        errorHandlers.forEach((h) => h(msg.message));
         break;
     }
   }
@@ -177,6 +182,9 @@ export function createRoom(opts: RoomOptions) {
     },
     onStateChange(cb: StateHandler) {
       stateHandlers.push(cb);
+    },
+    onError(cb: ErrorHandler) {
+      errorHandlers.push(cb);
     },
     get connectionState() {
       return state;
