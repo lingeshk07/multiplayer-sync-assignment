@@ -33,7 +33,9 @@ type LatencyHandler = (latencyMs: number) => void;
 // a small dead-zone is imperceptible for cursor tracking and cuts message
 // volume by 2-4x versus sending raw events.
 const CURSOR_MIN_INTERVAL_MS = 33;
-const CURSOR_MIN_DISTANCE_PX = 1.5;
+// Coordinates are normalized to 0–1 before sending. 0.002 is roughly 1–2px
+// on a typical canvas and avoids sending imperceptibly small movements.
+const CURSOR_MIN_DISTANCE = 0.002;
 
 export function createRoom(opts: RoomOptions) {
   const url = opts.url ?? inferDefaultUrl();
@@ -75,7 +77,9 @@ export function createRoom(opts: RoomOptions) {
     socket.onopen = () => {
       reconnectAttempt = 0;
       setState('open');
-      pingTimer = setInterval(() => send({ type: 'ping', t: Date.now() }), 10000);
+      const sendPing = () => send({ type: 'ping', t: Date.now() });
+      sendPing();
+      pingTimer = setInterval(sendPing, 10000);
     };
 
     socket.onmessage = (ev) => {
@@ -162,7 +166,7 @@ export function createRoom(opts: RoomOptions) {
     const now = performance.now();
     if (action.type === 'cursor') {
       const dist = Math.hypot(action.x - lastSent.x, action.y - lastSent.y);
-      if (now - lastSent.t < CURSOR_MIN_INTERVAL_MS || dist < CURSOR_MIN_DISTANCE_PX) return;
+      if (now - lastSent.t < CURSOR_MIN_INTERVAL_MS || dist < CURSOR_MIN_DISTANCE) return;
       lastSent = { x: action.x, y: action.y, t: now };
       send({ type: 'cursor', x: action.x, y: action.y, seq: nextSequence(), t: Date.now() });
     } else {

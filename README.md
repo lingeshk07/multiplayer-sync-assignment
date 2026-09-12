@@ -102,7 +102,8 @@ since the server needs them to route the upgrade *before* any message frame can 
 Raw `mousemove` fires at 60-120Hz depending on hardware — sending every event is wasted
 bandwidth for output that's displayed at most 60fps on the receiving end. `connection.ts`
 caps outbound cursor sends to ~30Hz (`CURSOR_MIN_INTERVAL_MS = 33`) *and* skips
-sub-1.5px movements, so a stationary mouse sends nothing. This alone cuts message volume
+movements smaller than 0.002 of the canvas dimension (roughly 1–2 pixels on a typical
+canvas), so a stationary mouse sends nothing. This alone cuts message volume
 2-4x versus naive forwarding, with no perceptible loss of smoothness once you add
 interpolation on the receiving end (see below). Reactions are discrete user intent (a
 tap) and are never throttled — each one is a distinct, meaningful event.

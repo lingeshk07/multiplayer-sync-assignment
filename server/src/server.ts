@@ -39,7 +39,9 @@ server.on('upgrade', (req, socket) => {
     raw.close(1008, 'room not found');
     return;
   }
-  if (mode === 'create' && existingRoom) {
+  // A development-mode remount or a double click can repeat a create request
+  // from the same tab. It is safe to treat that stable identity as a reconnect.
+  if (mode === 'create' && existingRoom && !existingRoom.hasClient(clientId)) {
     raw.send(JSON.stringify({ type: 'error', message: 'This room already exists. Use Join room instead.' }));
     raw.close(1008, 'room already exists');
     return;
