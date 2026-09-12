@@ -30,6 +30,10 @@ The sidebar shows live presence and connection status.
 **Type-checking:** `npm run typecheck` works in both `server/` and `client/` and passes
 clean (verified as part of building this).
 
+**Integration test:** from `server/`, run `npm run test:integration`. It starts a temporary
+local server and verifies room create/join rejection rules, five simultaneous clients,
+presence, cursor relay, reaction relay, and leave cleanup.
+
 ## Known limitations
 
 - No authentication or per-room access control (shared public room IDs, per the assignment).
@@ -55,13 +59,11 @@ edge cases (0/1/many samples, extrapolation cap, out-of-order rejection) right.
 
 ## AI tool disclosure
 
-Built with Claude (Anthropic) as a pair-programming assistant: Claude wrote the initial
-implementation across all files end-to-end from the spec, which I then had it verify by
-actually installing dependencies, type-checking both packages, and running a live
-two-client integration test against the running server (join, cursor broadcast with
-self-echo suppression, stale-sequence rejection, reaction relay, malformed-message
-rejection, and disconnect/leave) before treating anything as done. I can explain and
-defend every file in this repo.
+Claude (Anthropic) assisted with the initial implementation. Codex was later used to
+review the assignment against the final code, improve the UI and room workflow, tighten
+runtime validation, add the five-client integration test, and run type-check/build
+verification. The final implementation was reviewed and tested locally; I can explain
+and defend each file and design decision.
 
 ---
 

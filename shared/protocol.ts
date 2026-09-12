@@ -45,6 +45,18 @@ function isFiniteNumber(v: unknown): v is number {
   return typeof v === 'number' && Number.isFinite(v);
 }
 
+function isParticipant(obj: unknown): obj is Participant {
+  if (typeof obj !== 'object' || obj === null) return false;
+  const p = obj as Record<string, unknown>;
+  return (
+    typeof p.clientId === 'string' &&
+    typeof p.name === 'string' &&
+    typeof p.color === 'string' &&
+    isFiniteNumber(p.x) &&
+    isFiniteNumber(p.y)
+  );
+}
+
 export function isClientMessage(obj: unknown): obj is ClientMessage {
   if (typeof obj !== 'object' || obj === null) return false;
   const o = obj as Record<string, unknown>;
@@ -75,9 +87,14 @@ export function isServerMessage(obj: unknown): obj is ServerMessage {
   const o = obj as Record<string, unknown>;
   switch (o.type) {
     case 'welcome':
-      return typeof o.clientId === 'string' && Array.isArray(o.participants) && isFiniteNumber(o.serverTime);
+      return (
+        typeof o.clientId === 'string' &&
+        Array.isArray(o.participants) &&
+        o.participants.every(isParticipant) &&
+        isFiniteNumber(o.serverTime)
+      );
     case 'presence':
-      return Array.isArray(o.participants);
+      return Array.isArray(o.participants) && o.participants.every(isParticipant);
     case 'cursor':
       return (
         typeof o.clientId === 'string' &&
