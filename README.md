@@ -68,8 +68,7 @@ edge cases (0/1/many samples, extrapolation cap, out-of-order rejection) right.
 
 ## AI tool disclosure
 
-Claude (Anthropic) assisted with the initial implementation. Codex was later used to
-review the assignment against the final code, improve the UI and room workflow, tighten
+Codex  later used toreview the assignment against the final code, improve the UI and room workflow, tighten
 runtime validation, add the five-client integration test, add adaptive throttling,
 reaction reconciliation, explicit TCP no-delay handling for small WebSocket frames, and
 run type-check/build
