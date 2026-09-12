@@ -19,9 +19,10 @@ function getOrCreateClientId(): string {
   return id;
 }
 
-function getRoomIdFromUrl(): string {
+function getRoomIdFromUrl(): string | null {
   const params = new URLSearchParams(window.location.search);
-  return params.get('room') ?? 'watch-party-42';
+  const roomId = params.get('room')?.trim();
+  return roomId || null;
 }
 
 export default function App() {
@@ -32,12 +33,21 @@ export default function App() {
   const participantsMeta = useRef(new Map<string, { name: string; color: string }>());
 
   const [selfId] = useState(getOrCreateClientId);
-  const [roomId] = useState(getRoomIdFromUrl);
+  const [roomId, setRoomId] = useState<string | null>(getRoomIdFromUrl);
+  const [roomInput, setRoomInput] = useState(() => getRoomIdFromUrl() ?? '');
+  const [roomError, setRoomError] = useState('');
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [connectionState, setConnectionState] = useState<ConnectionState>('connecting');
 
   // --- Wire up the room connection -------------------------------------
   useEffect(() => {
+    if (!roomId) return;
+
+    interpolators.current.clear();
+    reactionsRef.current = [];
+    participantsMeta.current.clear();
+    setParticipants([]);
+
     const room = createRoom({ roomId, clientId: selfId, name: `guest-${selfId.slice(0, 4)}` });
     roomRef.current = room;
 
@@ -145,6 +155,51 @@ export default function App() {
     reactionsRef.current.push({ x, y, emoji, startedAt: performance.now() });
   }
 
+  function enterRoom() {
+    const nextRoomId = roomInput.trim();
+    if (!nextRoomId) {
+      setRoomError('Enter a room name to continue.');
+      return;
+    }
+    setRoomError('');
+    window.history.replaceState(null, '', `${window.location.pathname}?room=${encodeURIComponent(nextRoomId)}`);
+    setRoomId(nextRoomId);
+  }
+
+  function leaveRoom() {
+    roomRef.current?.close();
+    window.history.replaceState(null, '', window.location.pathname);
+    setRoomId(null);
+    setRoomInput('');
+  }
+
+  if (!roomId) {
+    return (
+      <main className="lobby-shell">
+        <section className="lobby-card" aria-labelledby="lobby-title">
+          <p className="eyebrow">Live collaboration</p>
+          <h1 id="lobby-title">Enter a cursor room</h1>
+          <p className="lobby-copy">Create a room for your group, or enter the exact room name to join one already in progress.</p>
+          <label className="room-label" htmlFor="room-name">Room name</label>
+          <input
+            id="room-name"
+            value={roomInput}
+            onChange={(event) => { setRoomInput(event.target.value); setRoomError(''); }}
+            onKeyDown={(event) => { if (event.key === 'Enter') enterRoom(); }}
+            placeholder="e.g. design-team"
+            autoFocus
+          />
+          {roomError && <p className="room-error" role="alert">{roomError}</p>}
+          <div className="room-actions">
+            <button className="primary-button" type="button" onClick={enterRoom}>Create room</button>
+            <button className="secondary-button" type="button" onClick={enterRoom}>Join room</button>
+          </div>
+          <p className="lobby-note">Rooms are separate: only people using the same room name can see one another.</p>
+        </section>
+      </main>
+    );
+  }
+
   return (
     <main className="app-shell">
       <section className="canvas-panel" aria-label="Live cursor canvas">
@@ -166,6 +221,7 @@ export default function App() {
           <p className="eyebrow">Current room</p>
           <h2>{roomId}</h2>
           <p className="participant-count"><strong>{participants.length}</strong> {participants.length === 1 ? 'person' : 'people'} here</p>
+          <button className="change-room-button" type="button" onClick={leaveRoom}>Change room</button>
         </header>
         <section className="participants-section" aria-labelledby="participants-heading">
           <div className="section-title-row"><h3 id="participants-heading">Participants</h3><span>{participants.length}</span></div>
@@ -179,7 +235,6 @@ export default function App() {
           ))}
           </ul>
         </section>
-        <footer className="sidebar-footer"><p>Share the room</p><code>?room=your-room-name</code><span>Open it in another tab to collaborate.</span></footer>
       </aside>
     </main>
   );
