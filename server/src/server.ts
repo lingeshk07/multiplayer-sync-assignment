@@ -39,7 +39,10 @@ server.on('upgrade', (req, socket) => {
     raw.close(1008, 'room not found');
     return;
   }
-  if (mode === 'create' && existingRoom) {
+  // React development mode may briefly open the same tab's connection twice.
+  // Treat a repeated create from that same stable client identity as a reconnect,
+  // while still rejecting a different client attempting to create an active room.
+  if (mode === 'create' && existingRoom && !existingRoom.hasClient(clientId)) {
     raw.send(JSON.stringify({ type: 'error', message: 'This room already exists. Use Join room instead.' }));
     raw.close(1008, 'room already exists');
     return;

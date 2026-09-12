@@ -33,6 +33,10 @@ export class Room {
     return this.clients.size;
   }
 
+  hasClient(id: string) {
+    return this.clients.has(id);
+  }
+
   /**
    * Adds a new client, or, if `id` already has a live entry (reconnect
    * case), swaps in the new socket while preserving identity/state so the

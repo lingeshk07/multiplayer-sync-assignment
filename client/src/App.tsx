@@ -176,6 +176,7 @@ export default function App() {
       return;
     }
     setRoomError('');
+    setLatencyMs(null);
     setRoomMode(mode);
     window.history.replaceState(null, '', `${window.location.pathname}?room=${encodeURIComponent(nextRoomId)}`);
     setRoomId(nextRoomId);
