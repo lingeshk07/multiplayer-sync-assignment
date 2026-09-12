@@ -36,9 +36,11 @@ export default function App() {
   const [roomId, setRoomId] = useState<string | null>(getRoomIdFromUrl);
   const [roomInput, setRoomInput] = useState(() => getRoomIdFromUrl() ?? '');
   const [roomMode, setRoomMode] = useState<'create' | 'join'>('join');
+  const [connectionAttempt, setConnectionAttempt] = useState(0);
   const [roomError, setRoomError] = useState('');
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [connectionState, setConnectionState] = useState<ConnectionState>('connecting');
+  const [latencyMs, setLatencyMs] = useState<number | null>(null);
 
   // --- Wire up the room connection -------------------------------------
   useEffect(() => {
@@ -52,11 +54,14 @@ export default function App() {
     const room = createRoom({ roomId, clientId: selfId, mode: roomMode, name: `guest-${selfId.slice(0, 4)}` });
     roomRef.current = room;
 
-    room.onStateChange(setConnectionState);
+    room.onStateChange((state) => {
+      setConnectionState(state);
+      if (state === 'open') setRoomError('');
+    });
     room.onError((message) => {
       setRoomError(message);
-      setRoomId(null);
     });
+    room.onLatency(setLatencyMs);
 
     room.onWelcome((_id, initialParticipants) => {
       setParticipants(initialParticipants);
@@ -100,7 +105,7 @@ export default function App() {
     });
 
     return () => room.close();
-  }, [roomId, roomMode, selfId]);
+  }, [connectionAttempt, roomId, roomMode, selfId]);
 
   // --- Render loop -------------------------------------------------------
   useEffect(() => {
@@ -147,13 +152,17 @@ export default function App() {
 
   function handleMouseMove(e: React.MouseEvent<HTMLCanvasElement>) {
     const rect = e.currentTarget.getBoundingClientRect();
-    roomRef.current?.sendAction({ type: 'cursor', x: e.clientX - rect.left, y: e.clientY - rect.top });
+    roomRef.current?.sendAction({
+      type: 'cursor',
+      x: clamp((e.clientX - rect.left) / rect.width),
+      y: clamp((e.clientY - rect.top) / rect.height),
+    });
   }
 
   function handleClick(e: React.MouseEvent<HTMLCanvasElement>) {
     const rect = e.currentTarget.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
+    const x = clamp((e.clientX - rect.left) / rect.width);
+    const y = clamp((e.clientY - rect.top) / rect.height);
     const emoji = EMOJIS[Math.floor(Math.random() * EMOJIS.length)];
     roomRef.current?.sendAction({ type: 'reaction', emoji, x, y });
     // Show our own reaction immediately rather than waiting on the round trip.
@@ -177,6 +186,13 @@ export default function App() {
     window.history.replaceState(null, '', window.location.pathname);
     setRoomId(null);
     setRoomInput('');
+    setLatencyMs(null);
+  }
+
+  function retryRoom() {
+    setRoomError('');
+    setLatencyMs(null);
+    setConnectionAttempt((attempt) => attempt + 1);
   }
 
   if (!roomId) {
@@ -227,6 +243,7 @@ export default function App() {
           <p className="eyebrow">Current room</p>
           <h2>{roomId}</h2>
           <p className="participant-count"><strong>{participants.length}</strong> {participants.length === 1 ? 'person' : 'people'} here</p>
+          <p className="latency-reading">Latency: {latencyMs === null ? 'measuring…' : `${latencyMs} ms`}</p>
           <button className="change-room-button" type="button" onClick={leaveRoom}>Change room</button>
         </header>
         <section className="participants-section" aria-labelledby="participants-heading">
@@ -241,7 +258,12 @@ export default function App() {
           ))}
           </ul>
         </section>
+        {roomError && <div className="connection-error" role="alert"><span>{roomError}</span><button type="button" onClick={retryRoom}>Retry</button></div>}
       </aside>
     </main>
   );
+}
+
+function clamp(value: number) {
+  return Math.min(1, Math.max(0, value));
 }

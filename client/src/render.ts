@@ -25,7 +25,7 @@ export function drawFrame(
   ctx.clearRect(0, 0, width, height);
 
   for (const cursor of cursors.values()) {
-    drawCursor(ctx, cursor);
+    drawCursor(ctx, { ...cursor, x: cursor.x * width, y: cursor.y * height });
   }
 
   for (const r of reactions) {
@@ -36,7 +36,7 @@ export function drawFrame(
     ctx.globalAlpha = 1 - progress;
     ctx.font = `${28 + progress * 16}px sans-serif`;
     ctx.textAlign = 'center';
-    ctx.fillText(r.emoji, r.x, r.y - progress * 40);
+    ctx.fillText(r.emoji, r.x * width, r.y * height - progress * 40);
     ctx.restore();
   }
 }

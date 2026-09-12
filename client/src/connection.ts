@@ -25,6 +25,7 @@ type LeaveHandler = (clientId: string) => void;
 export type ConnectionState = 'connecting' | 'open' | 'closed' | 'reconnecting';
 type StateHandler = (state: ConnectionState) => void;
 type ErrorHandler = (message: string) => void;
+type LatencyHandler = (latencyMs: number) => void;
 
 // Cursor throttling: cap outbound rate and skip micro-movements. mousemove
 // fires at 60-120Hz; sending every event is wasted bandwidth for visual
@@ -46,6 +47,7 @@ export function createRoom(opts: RoomOptions) {
   let reconnectAttempt = 0;
   let closedByUser = false;
   let pingTimer: ReturnType<typeof setInterval> | null = null;
+  let connectMode = opts.mode ?? 'join';
 
   const remoteActionHandlers: RemoteActionHandler[] = [];
   const presenceHandlers: PresenceHandler[] = [];
@@ -53,6 +55,7 @@ export function createRoom(opts: RoomOptions) {
   const leaveHandlers: LeaveHandler[] = [];
   const stateHandlers: StateHandler[] = [];
   const errorHandlers: ErrorHandler[] = [];
+  const latencyHandlers: LatencyHandler[] = [];
 
   function setState(s: ConnectionState) {
     state = s;
@@ -65,7 +68,7 @@ export function createRoom(opts: RoomOptions) {
       `${url}?roomId=${encodeURIComponent(opts.roomId)}` +
       `&clientId=${encodeURIComponent(opts.clientId)}` +
       `&name=${encodeURIComponent(opts.name ?? '')}` +
-      `&mode=${opts.mode ?? 'join'}`;
+      `&mode=${connectMode}`;
 
     socket = new WebSocket(wsUrl);
 
@@ -108,6 +111,8 @@ export function createRoom(opts: RoomOptions) {
   function dispatch(msg: ServerMessage) {
     switch (msg.type) {
       case 'welcome':
+        // Creating a room is a one-time operation. Every later reconnect must join it.
+        connectMode = 'join';
         welcomeHandlers.forEach((h) => h(msg.clientId, msg.participants, msg.serverTime));
         break;
       case 'presence':
@@ -131,9 +136,11 @@ export function createRoom(opts: RoomOptions) {
         leaveHandlers.forEach((h) => h(msg.clientId));
         break;
       case 'pong':
-        break; // could compute RTT here; not needed for the base demo
+        latencyHandlers.forEach((h) => h(Math.max(0, Date.now() - msg.t)));
+        break;
       case 'error':
         console.warn('[room] server error:', msg.message);
+        closedByUser = true;
         errorHandlers.forEach((h) => h(msg.message));
         break;
     }
@@ -185,6 +192,9 @@ export function createRoom(opts: RoomOptions) {
     },
     onError(cb: ErrorHandler) {
       errorHandlers.push(cb);
+    },
+    onLatency(cb: LatencyHandler) {
+      latencyHandlers.push(cb);
     },
     get connectionState() {
       return state;

@@ -45,6 +45,10 @@ function isFiniteNumber(v: unknown): v is number {
   return typeof v === 'number' && Number.isFinite(v);
 }
 
+function isNormalizedCoordinate(v: unknown): v is number {
+  return isFiniteNumber(v) && v >= 0 && v <= 1;
+}
+
 function isParticipant(obj: unknown): obj is Participant {
   if (typeof obj !== 'object' || obj === null) return false;
   const p = obj as Record<string, unknown>;
@@ -63,15 +67,15 @@ export function isClientMessage(obj: unknown): obj is ClientMessage {
   switch (o.type) {
     case 'cursor':
       return (
-        isFiniteNumber(o.x) && isFiniteNumber(o.y) && isFiniteNumber(o.seq) && isFiniteNumber(o.t)
+        isNormalizedCoordinate(o.x) && isNormalizedCoordinate(o.y) && isFiniteNumber(o.seq) && isFiniteNumber(o.t)
       );
     case 'reaction':
       return (
         typeof o.emoji === 'string' &&
         o.emoji.length > 0 &&
         o.emoji.length <= 8 &&
-        isFiniteNumber(o.x) &&
-        isFiniteNumber(o.y) &&
+        isNormalizedCoordinate(o.x) &&
+        isNormalizedCoordinate(o.y) &&
         isFiniteNumber(o.seq) &&
         isFiniteNumber(o.t)
       );

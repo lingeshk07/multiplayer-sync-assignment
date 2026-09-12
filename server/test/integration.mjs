@@ -95,13 +95,13 @@ try {
     await until(first, (message) => message.type === 'presence' && message.participants.length === i);
   }
 
-  first.send(JSON.stringify({ type: 'cursor', x: 120, y: 80, seq: 1, t: 1 }));
+  first.send(JSON.stringify({ type: 'cursor', x: 0.12, y: 0.08, seq: 1, t: 1 }));
   for (const client of clients.slice(1)) {
     const cursor = await until(client, (message) => message.type === 'cursor');
-    assert.deepEqual(cursor, { type: 'cursor', clientId: 'client-1', x: 120, y: 80, seq: 1, t: 1 });
+    assert.deepEqual(cursor, { type: 'cursor', clientId: 'client-1', x: 0.12, y: 0.08, seq: 1, t: 1 });
   }
 
-  clients[1].send(JSON.stringify({ type: 'reaction', emoji: '🎉', x: 40, y: 50, seq: 1, t: 2 }));
+  clients[1].send(JSON.stringify({ type: 'reaction', emoji: '🎉', x: 0.04, y: 0.05, seq: 1, t: 2 }));
   for (const client of [first, ...clients.slice(2)]) {
     const reaction = await until(client, (message) => message.type === 'reaction');
     assert.equal(reaction.clientId, 'client-2');

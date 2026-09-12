@@ -46,10 +46,6 @@ presence, cursor relay, reaction relay, and leave cleanup.
 - No binary frame support (not needed — everything is JSON text).
 - Disconnect detection is bounded by the heartbeat interval (15s), so a dropped
   connection can take up to ~15-30s to be reaped if it never sends a TCP `close`.
-- Cursor positions are canvas-local pixel coordinates, not normalized to viewport size,
-  so cursors will appear in the "wrong" relative spot if participants have very
-  differently sized windows. Fine for the assignment's scope; a real product would
-  normalize to 0-1 and rescale per viewport.
 
 ## Time spent
 
@@ -80,8 +76,8 @@ crashing the connection.
 
 | Type | Shape | Notes |
 |---|---|---|
-| `cursor` | `{ type, x, y, seq, t }` | Throttled client-side (see below). |
-| `reaction` | `{ type, emoji, x, y, seq, t }` | One per tap, never throttled. |
+| `cursor` | `{ type, x, y, seq, t }` | `x`/`y` are normalized 0–1 coordinates; throttled client-side. |
+| `reaction` | `{ type, emoji, x, y, seq, t }` | Normalized coordinates; one per tap, never throttled. |
 | `ping` | `{ type, t }` | Heartbeat-adjacent; used for potential RTT measurement, not required for liveness (see Failure handling). |
 
 ### Server → Client
@@ -118,6 +114,10 @@ cursor position** (needed to snapshot new joiners) and **per-client sequence num
 (needed to reject stale/out-of-order updates). Everything else — interpolation,
 rendering, reaction animation, throttling decisions — is pure client concern; the server
 never touches pixels or timing beyond relaying the sender's own timestamp.
+
+Coordinates are normalized to the 0–1 range before they leave the browser and validated
+on the server. Each viewer scales them to its own canvas size, so cursors align by
+relative position even when participants have differently sized windows.
 
 ---
 
@@ -167,6 +167,10 @@ client that doesn't pong before the *next* sweep is dropped and a `leave` is bro
 this bounds "zombie cursor" time to roughly one heartbeat interval even for a hard
 network drop that never sends a TCP close. A clean tab-close/`socket.close()` is handled
 immediately via the `close` frame instead of waiting for the next sweep.
+
+**Connection feedback:** the sidebar shows live round-trip latency calculated from the
+existing `ping`/`pong` timestamp. Server-side connection errors remain visible with a
+Retry button instead of silently sending the user back to the room-selection screen.
 
 **Reconnect:** the client persists its `clientId` in `sessionStorage`, so refreshing the
 page (or recovering after a dropped connection) rejoins as the *same* identity. Server-
