@@ -20,6 +20,13 @@ import { createHash } from 'crypto';
 
 const WEBSOCKET_GUID = '258EAFA5-E914-47DA-95CA-C5AB0DC85B11';
 
+// HTTP upgrade sockets are TCP sockets in production. `Duplex` does not
+// expose this TCP-specific method, so retain the generic transport type while
+// enabling the capability when it is available.
+type TcpCapableDuplex = Duplex & {
+  setNoDelay?: (noDelay?: boolean) => void;
+};
+
 export type OpCode = 0x0 | 0x1 | 0x2 | 0x8 | 0x9 | 0xa;
 
 interface FrameHandlers {
@@ -219,6 +226,10 @@ export function performHandshake(req: IncomingMessage, socket: Duplex): RawSocke
     '\r\n',
   ].join('\r\n');
 
+  // Cursor, reaction, and ping/pong frames are deliberately small and
+  // latency-sensitive. Disable Nagle on this upgraded TCP connection so a
+  // small server response is not held while waiting to batch more data.
+  (socket as TcpCapableDuplex).setNoDelay?.(true);
   socket.write(responseHeaders);
   return new RawSocket(socket);
 }
